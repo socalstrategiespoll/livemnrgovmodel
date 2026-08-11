@@ -403,7 +403,13 @@ function render(data) {
 
   CANDIDATES.forEach((cand) => {
     $("pct-" + cand).textContent = p.pct[cand].toFixed(1) + "%";
-    $("votes-" + cand).textContent = num.format(p.votes[cand] || 0) + " projected";
+    const i50 = p.interval_50 && p.interval_50[cand];
+    const i90 = p.interval_90 && p.interval_90[cand];
+    $("votes-" + cand).innerHTML = num.format(p.votes[cand] || 0) + " projected" +
+      (i50 && i90
+        ? `<br>50%: ${i50[0].toFixed(1)}–${i50[1].toFixed(1)}% &middot; ` +
+          `90%: ${i90[0].toFixed(1)}–${i90[1].toFixed(1)}%`
+        : "");
   });
 
   $("tally-bar").innerHTML = CANDIDATES.map((cand) =>
