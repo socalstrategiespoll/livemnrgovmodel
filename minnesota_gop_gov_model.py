@@ -456,6 +456,8 @@ class MinnesotaGOPGovModel:
             "mean_pct": {cand: float(np.mean(pcts[:, j])) for j, cand in enumerate(CANDIDATES)},
             "median_pct": {cand: float(np.median(pcts[:, j])) for j, cand in enumerate(CANDIDATES)},
             "p05": {cand: float(np.percentile(pcts[:, j], 5)) for j, cand in enumerate(CANDIDATES)},
+            "p25": {cand: float(np.percentile(pcts[:, j], 25)) for j, cand in enumerate(CANDIDATES)},
+            "p75": {cand: float(np.percentile(pcts[:, j], 75)) for j, cand in enumerate(CANDIDATES)},
             "p95": {cand: float(np.percentile(pcts[:, j], 95)) for j, cand in enumerate(CANDIDATES)},
             "win_prob": win_prob,
         }
