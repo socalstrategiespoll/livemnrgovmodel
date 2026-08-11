@@ -173,11 +173,11 @@
     <div class="panel">
       <h2>Model state</h2>
       <p class="panel-note">
-        This model is NOT deductive: it doesn't hold counted votes fixed and
-        project only the remainder. Every county's projection blends its own
-        results with the baseline at a credibility weight that grows with how
-        much has reported -- and shifts further toward observed results when
-        many counties show the same pattern, not just one. Sherburne County's
+        This model IS deductive: every county's reported votes are held
+        exactly fixed. Only the uncounted remainder is projected -- a
+        credibility-weighted blend of the county's own trend and a
+        shift-adjusted baseline -- and added on top. A fully-reported county
+        shows exactly what was counted, nothing modeled. Sherburne County's
         baseline is a statewide-average placeholder, not a real read --
         treat its numbers with extra skepticism.
       </p>

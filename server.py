@@ -118,17 +118,18 @@ def build_output(model: MinnesotaGOPGovModel, sim: dict, proj: dict,
 
 def build_county_table(model: MinnesotaGOPGovModel) -> list:
     """Per-county rows covering all 87 counties every cycle. Each row's raw
-    'votes'/'pct' is the honest, unmodeled counted-so-far split; 'projected'
-    is the model's blended four-way projection (see
-    minnesota_gop_gov_model.py) -- can legitimately differ from raw results
-    early on, by design, same as the Senate build."""
+    'votes'/'pct' is the reported count, held EXACTLY fixed by the model
+    (deductive); 'projected_final' is that same reported count plus the
+    model's projection for whatever remains uncounted in that county (see
+    minnesota_gop_gov_model.py's project_county_votes()) -- for a fully
+    reported county the two are identical, since nothing is left to model."""
     rows = []
     for name, c in model.counties.items():
         raw_votes = dict(c.votes)
         raw_total = c.counted_votes
         raw_pct = {cand: (100 * raw_votes[cand] / raw_total if raw_total else None)
                    for cand in CANDIDATES}
-        projected_shares = model.project_shares(c)
+        projected_pct = model.project_county_pct(c)
         remaining = max(0, c.effective_turnout - c.counted_votes)
 
         rows.append({
@@ -146,7 +147,7 @@ def build_county_table(model: MinnesotaGOPGovModel) -> list:
             "projected_total": int(c.effective_turnout),
             "calibrated_turnout": int(c.calibrated_turnout) if c.calibrated_turnout else None,
             "remaining": int(round(remaining)),
-            "projected_final": {cand: round(projected_shares[cand], 1) for cand in CANDIDATES},
+            "projected_final": {cand: round(projected_pct[cand], 1) for cand in CANDIDATES},
         })
 
     rows.sort(key=lambda r: (-sum(r["votes"].values()), -r["projected_total"]))

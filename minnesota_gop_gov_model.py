@@ -14,9 +14,37 @@ first-batch discount, turnout recalibration) are unchanged in spirit -- see
 minnesota_senate_model.py's own docstring for the full reasoning behind each
 one. What follows only documents what changed to go from 2 candidates to N.
 
-NOT DEDUCTIVE, same as the Senate build: every county's full projected result
-is effective_turnout * blended_shares, not counted-votes-held-fixed plus a
-projected remainder.
+NOW DEDUCTIVE (changed from the initial four-way build, which followed the
+Senate template's non-deductive blend)
+
+Every county's REPORTED votes are held as literal fixed truth -- they are
+never blended, never pulled toward the baseline, never touched by momentum
+clamping. Only the UNCOUNTED remainder of each county is projected, same as
+the MI/WI/SD deductive family this whole repo lineage started from (see
+NEW_MN_MODEL_GUIDE.md and README.md for that family's reasoning -- this
+build now follows it instead of the Senate build's blend-the-whole-county
+approach). Concretely: `project_county_votes()` returns
+`c.votes[cand] + remaining * remainder_shares[cand] / 100` for every
+candidate, where `remaining = effective_turnout - counted_votes` and
+`c.votes[cand]` is copied through untouched. What used to be
+`project_shares()` (which projected a share for the WHOLE county, counted
+portion included) is now `project_remainder_shares()`, which projects a
+share only for what's LEFT to count -- same credibility blend, same
+momentum clamp, same renormalization, just aimed at the remainder instead of
+the whole county. A fully-reported county (remaining == 0) contributes
+nothing from the model at all; its number is exactly what was counted.
+
+THIS IS A GENERALIZATION OF THE SENATE TEMPLATE, NOT A COPY
+
+Every prior MN model in this family (minnesota_senate_model.py) tracked a
+single scalar "margin" (Flanagan minus Craig). With four candidates there is
+no single margin -- so every place the Senate model used a margin, this one
+uses a SHARE VECTOR: a dict of {candidate: percent} that always sums to 100.
+The underlying techniques (credibility blend, evidence-weighted shift
+shrinkage, outlier dampening, single-county evidence cap, momentum clamp,
+first-batch discount, turnout recalibration) are unchanged in spirit -- see
+minnesota_senate_model.py's own docstring for the full reasoning behind each
+one. What follows only documents what changed to go from 2 candidates to N.
 
 STILL MINNESOTA-SPECIFIC (carried forward from the Senate build, unchanged):
 Minnesota never separates absentee from Election Day in official results, and
@@ -25,6 +53,12 @@ batch-timing pattern with no fixed statewide rule -- hence MOMENTUM_TRIGGER_PCT
 raised to 0.35 and FIRST_BATCH_DISCOUNT = 0.5, both direction-agnostic since
 the feed can't verify which way (if any) a mode skew runs, or whether it even
 applies the same way in a primary as it did in the Senate general.
+FIRST_BATCH_DISCOUNT is now applied directly to each county's evidence
+weight in `_shift_for_candidate` (it used to live only inside `credibility`,
+which no longer gates whether counted votes get touched -- but a shift
+computed off an unrepresentative first batch is exactly the failure mode
+this constant exists to prevent, deductive or not, so it moved into the
+evidence weight itself rather than disappearing).
 
 WHAT CHANGED FOR THE SHIFT MACHINERY (per-candidate, not one scalar)
 
@@ -36,12 +70,13 @@ differs across candidates for a given county. This is equivalent to running
 the Senate model's exact one-candidate-vs-the-rest shift computation four
 times. The four resulting shifts are NOT constrained to net to zero point-for-
 point after shrinkage (independent shrinkage per candidate can drift the sum
-slightly off 100); project_shares() renormalizes after blending, same as any
-rounding cleanup, rather than building that constraint into the shrinkage math
-itself -- simpler, and the drift this could introduce is negligible next to
-GLOBAL_EVIDENCE_PRIOR/REGIONAL_EVIDENCE_PRIOR (unchanged from the Senate
-build's vote-count scale: MAX_SINGLE_COUNTY_SHARE=0.25 still caps how much any
-one county, even Hennepin, can look like a "consistent pattern" alone).
+slightly off 100); project_remainder_shares() renormalizes after blending,
+same as any rounding cleanup, rather than building that constraint into the
+shrinkage math itself -- simpler, and the drift this could introduce is
+negligible next to GLOBAL_EVIDENCE_PRIOR/REGIONAL_EVIDENCE_PRIOR (unchanged
+from the Senate build's vote-count scale: MAX_SINGLE_COUNTY_SHARE=0.25 still
+caps how much any one county, even Hennepin, can look like a "consistent
+pattern" alone).
 
 THE BASELINE ITSELF is unusually thin for this race -- see
 build_mn_gop_baseline.py's docstring. Sherburne County's row is a statewide-
@@ -264,6 +299,8 @@ class MinnesotaGOPGovModel:
             if om is None:
                 continue
             w = c.counted_votes * (c.pct_counted ** (1 / CREDIBILITY_EXPONENT))
+            if c.is_first_batch:
+                w *= FIRST_BATCH_DISCOUNT
             surprises.append(om[candidate] - c.baseline_shares[candidate])
             weights.append(w)
             regions.append(c.region)
@@ -318,12 +355,12 @@ class MinnesotaGOPGovModel:
         self.total_evidence_weight = total_w
 
     # ------------------------------------------------------------
-    def project_shares(self, c: CountyState) -> Dict[str, float]:
-        """Four-way generalization of the Senate build's project_margin():
-        adjust each candidate's baseline by its regional shift, blend with
-        this county's own observed shares at `credibility` weight, momentum-
-        clamp each candidate once well-reported, then renormalize (clipping
-        negatives) so the four shares sum to exactly 100."""
+    def project_remainder_shares(self, c: CountyState) -> Dict[str, float]:
+        """Projects a share vector for what's LEFT to count in this county --
+        NOT the whole county. Counted votes are handled separately in
+        project_county_votes() and never touch this. Same credibility blend,
+        momentum clamp, and renormalization as before; only the target
+        changed (remainder, not whole county)."""
         adjusted = {}
         for cand in CANDIDATES:
             adj = c.baseline_shares[cand] + self.regional_shift[c.region][cand]
@@ -346,6 +383,21 @@ class MinnesotaGOPGovModel:
         total = sum(blended.values()) or 1.0
         return {cand: 100.0 * blended[cand] / total for cand in CANDIDATES}
 
+    def project_county_votes(self, c: CountyState) -> Dict[str, float]:
+        """Reported votes held exactly fixed; only the uncounted remainder is
+        modeled and added on top. This is the deductive combine step."""
+        remaining = max(0.0, c.effective_turnout - c.counted_votes)
+        remainder_shares = self.project_remainder_shares(c)
+        return {cand: c.votes[cand] + remaining * remainder_shares[cand] / 100.0
+                for cand in CANDIDATES}
+
+    def project_county_pct(self, c: CountyState) -> Dict[str, float]:
+        """Convenience wrapper for display: project_county_votes() as
+        percentages of this county's effective turnout."""
+        votes = self.project_county_votes(c)
+        total = sum(votes.values()) or 1.0
+        return {cand: 100.0 * votes[cand] / total for cand in CANDIDATES}
+
     # ------------------------------------------------------------
     def project(self) -> Dict:
         self._recalibrate_turnout()
@@ -355,10 +407,9 @@ class MinnesotaGOPGovModel:
         counted = {c: 0 for c in CANDIDATES}
         n_reported = 0
         for c in self.counties.values():
-            shares = self.project_shares(c)
-            turnout = c.effective_turnout
+            final_votes = self.project_county_votes(c)
             for cand in CANDIDATES:
-                totals[cand] += turnout * shares[cand] / 100.0
+                totals[cand] += final_votes[cand]
                 counted[cand] += c.votes[cand]
             if c.counted_votes > 0:
                 n_reported += 1
@@ -391,12 +442,13 @@ class MinnesotaGOPGovModel:
 
     # ------------------------------------------------------------
     def run_simulation(self, n_sims: int = N_SIMS, seed: Optional[int] = None) -> Dict:
-        """Vectorized Monte Carlo, generalized to N candidates: instead of one
-        margin per county per sim, each sim draws a full share vector per
-        county (Dirichlet-style noise around the point projection -- a shared
-        statewide shock plus county-level noise applied per candidate, then
-        clipped >=0 and renormalized), same shrink-with-credibility shape as
-        the Senate build."""
+        """Vectorized Monte Carlo, deductive: each county's counted votes are
+        held EXACTLY fixed across every simulation; only the uncounted
+        remainder gets simulated noise (a shared statewide shock plus
+        county-level noise per candidate, momentum-clamped once well-
+        reported, clipped >=0 and renormalized), then added on top of the
+        fixed counted votes. Generalized from one margin to N candidate
+        shares, same as project_remainder_shares()."""
         self._recalibrate_turnout()
         self._recompute_shifts()
 
@@ -407,9 +459,13 @@ class MinnesotaGOPGovModel:
         cred = np.array([c.credibility for c in counties])
         heterog = np.array([c.heterogeneity for c in counties])
         eff_turnout = np.array([c.effective_turnout for c in counties])
+        counted_total = np.array([c.counted_votes for c in counties])
+        remaining = np.maximum(0.0, eff_turnout - counted_total)
         pct_counted = np.array([c.pct_counted for c in counties])
-        point_shares = np.array([[self.project_shares(c)[cand] for cand in CANDIDATES]
-                                  for c in counties])  # (n_counties, n_candidates)
+        counted_matrix = np.array([[c.votes[cand] for cand in CANDIDATES] for c in counties],
+                                  dtype=float)  # (n_counties, n_candidates) -- held fixed
+        point_remainder_shares = np.array(
+            [[self.project_remainder_shares(c)[cand] for cand in CANDIDATES] for c in counties])
 
         base_sd = 8.0
         county_sd = base_sd * (1 - cred) ** 0.5 + heterog * (1 - cred) * 0.3
@@ -421,7 +477,7 @@ class MinnesotaGOPGovModel:
         statewide_sd = math.sqrt(shift_var_avg) * 15.0
         statewide_sd = math.sqrt(statewide_sd ** 2 + prior_sd ** 2)
 
-        obs = np.array([[c.observed_shares[cand] if c.observed_shares else point_shares[i, j]
+        obs = np.array([[c.observed_shares[cand] if c.observed_shares else point_remainder_shares[i, j]
                          for j, cand in enumerate(CANDIDATES)]
                         for i, c in enumerate(counties)])
         momentum_active = pct_counted >= MOMENTUM_TRIGGER_PCT
@@ -429,21 +485,24 @@ class MinnesotaGOPGovModel:
         n_cand = len(CANDIDATES)
         shared_shock = rng.normal(0, statewide_sd, size=(n_sims, 1, n_cand))
         county_shock = rng.normal(0, 1, size=(n_sims, n, n_cand)) * county_sd[None, :, None]
-        sim_shares = point_shares[None, :, :] + shared_shock + county_shock
+        sim_remainder_shares = point_remainder_shares[None, :, :] + shared_shock + county_shock
 
         lo = obs[None, :, :] - MOMENTUM_MAX_DRIFT
         hi = obs[None, :, :] + MOMENTUM_MAX_DRIFT
-        clipped = np.clip(sim_shares, lo, hi)
-        sim_shares = np.where(momentum_active[None, :, None], clipped, sim_shares)
-        sim_shares = np.clip(sim_shares, 0.0, 100.0)
+        clipped = np.clip(sim_remainder_shares, lo, hi)
+        sim_remainder_shares = np.where(momentum_active[None, :, None], clipped, sim_remainder_shares)
+        sim_remainder_shares = np.clip(sim_remainder_shares, 0.0, 100.0)
         # Guard against the rare case where noise clips all four candidates
         # to 0 for one county in one sim -- dividing by that zero sum would
         # NaN out the whole simulation's statewide total, not just that one
-        # county's contribution.
-        row_sums = np.maximum(sim_shares.sum(axis=2, keepdims=True), 1e-9)
-        sim_shares = sim_shares / row_sums * 100.0
+        # county's remainder.
+        row_sums = np.maximum(sim_remainder_shares.sum(axis=2, keepdims=True), 1e-9)
+        sim_remainder_shares = sim_remainder_shares / row_sums * 100.0
 
-        sim_votes = eff_turnout[None, :, None] * sim_shares / 100.0
+        # Deductive combine: counted votes fixed every sim, only the
+        # remainder varies.
+        sim_votes = counted_matrix[None, :, :] + \
+            remaining[None, :, None] * sim_remainder_shares / 100.0
         totals = sim_votes.sum(axis=1)  # (n_sims, n_candidates)
         grand = totals.sum(axis=1, keepdims=True)
         pcts = 100 * totals / grand

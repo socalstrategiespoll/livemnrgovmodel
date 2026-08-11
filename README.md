@@ -6,15 +6,16 @@ civicAPI once a race ID exists for it.
 
 Results from [civicAPI](https://civicapi.org).
 
-## FOUR-WAY, not two-candidate
+## DEDUCTIVE, unlike the Senate build
 
-Every prior model in this family (Michigan, Wisconsin, South Dakota, the MN
-US Senate primary) tracked exactly two candidates and a single scalar
-"margin." This race has three named candidates plus a real Other bucket, so
-`minnesota_gop_gov_model.py` tracks a **share vector** (a dict of
-`{lindell, demuth, qualls, other}` percentages summing to 100) everywhere the
-Senate model tracked a margin. See that file's module docstring for exactly
-what changed and what didn't.
+Every county's reported votes are held **exactly fixed**. Only the
+uncounted remainder of each county is modeled and added on top -- the same
+approach as the Michigan/Wisconsin/South Dakota family this repo lineage
+started from, not the Senate primary's "blend the whole county" approach.
+See `minnesota_gop_gov_model.py`'s module docstring for exactly what changed
+to make that switch, and what stayed the same (four-way share vectors
+instead of one margin, same credibility/shift/momentum machinery -- just
+aimed at the remainder now).
 
 ## How it fits together
 
@@ -31,16 +32,18 @@ run, which wipes the turnout-calibration and shift state the model accumulates o
 the night, and it has no URL for a site to read. The web service solves both by
 staying alive.
 
-## This model is NOT deductive
+## This model IS deductive
 
-Same architecture as the Senate build: every county's full projection is a
-credibility-weighted **blend** of its own observed results and a
-(shift-adjusted) baseline, not counted-votes-held-fixed-plus-projected-
-remainder. A single large county partially reporting is capped
-(`MAX_SINGLE_COUNTY_SHARE`) so it can't read as a "consistent pattern" on its
-own; a genuine multi-county pattern converges the shift toward the real swing
-well before 100% reporting. Full reasoning in
-`minnesota_gop_gov_model.py`'s module docstring.
+Reported votes are held **exactly fixed** -- the model never blends,
+shrinks, or momentum-clamps anything that's already been counted. Only the
+uncounted remainder of each county is projected: a credibility-weighted
+blend of the county's own observed trend and a shift-adjusted baseline,
+added on top of the fixed counted votes. A fully-reported county (0
+remaining) contributes nothing from the model at all -- its number is
+exactly what was counted. Same escape-hatch shift layer as before
+(evidence-weighted, single-county-capped at `MAX_SINGLE_COUNTY_SHARE`) still
+determines what the *remainder* assumption looks like for counties not yet
+fully in. Full reasoning in `minnesota_gop_gov_model.py`'s module docstring.
 
 ## Files
 
