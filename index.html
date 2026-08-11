@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Minnesota Governor — Republican Primary — Live Model</title>
+<meta name="description" content="Live county-level Bayesian projection of the Minnesota Republican gubernatorial primary: Lindell, Demuth, Qualls." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="race">
+      <span class="eyebrow">Minnesota · Governor · Republican Primary</span>
+      <span class="firm">SoCal Strategies live model</span>
+    </div>
+    <div class="pulse" id="pulse" data-state="connecting">
+      <span class="dot"></span>
+      <span id="pulse-label">connecting</span>
+      <span class="stamp" id="stamp"></span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <p class="alert" id="alert" hidden></p>
+
+  <section class="thesis" id="thesis" aria-live="polite">
+    <div class="verdict">
+      <span class="verdict-label">Leading</span>
+      <div class="verdict-line">
+        <span class="verdict-name" id="lead-name">—</span>
+        <span class="verdict-number" id="lead-margin">—</span>
+      </div>
+      <span class="verdict-sub" id="verdict-sub">Waiting for the first results</span>
+    </div>
+
+    <figure class="winprob">
+      <figcaption class="stat-label">Win probability</figcaption>
+      <div id="winprob-bars"></div>
+    </figure>
+  </section>
+
+  <section class="split split4">
+    <div class="stat" id="stat-lindell">
+      <span class="stat-label cand-lindell">Lindell</span>
+      <span class="stat-value" id="pct-lindell">—</span>
+      <span class="stat-note" id="votes-lindell">—</span>
+    </div>
+    <div class="stat" id="stat-demuth">
+      <span class="stat-label cand-demuth">Demuth</span>
+      <span class="stat-value" id="pct-demuth">—</span>
+      <span class="stat-note" id="votes-demuth">—</span>
+    </div>
+    <div class="stat" id="stat-qualls">
+      <span class="stat-label cand-qualls">Qualls</span>
+      <span class="stat-value" id="pct-qualls">—</span>
+      <span class="stat-note" id="votes-qualls">—</span>
+    </div>
+    <div class="stat" id="stat-other">
+      <span class="stat-label cand-other">Other</span>
+      <span class="stat-value" id="pct-other">—</span>
+      <span class="stat-note" id="votes-other">—</span>
+    </div>
+  </section>
+
+  <section class="split">
+    <div class="stat">
+      <span class="stat-label">Vote counted</span>
+      <span class="stat-value" id="counted">—</span>
+      <span class="stat-note"><span id="precincts">—</span> of precincts in</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Projected turnout</span>
+      <span class="stat-value" id="turnout">—</span>
+      <span class="stat-note">across all 87 counties</span>
+    </div>
+  </section>
+
+  <section class="tally">
+    <div class="tally-bar" id="tally-bar"></div>
+    <div class="tally-foot">
+      <span id="note">Model projection (baseline + observed results blended), not raw votes counted so far</span>
+    </div>
+  </section>
+
+  <section class="maps">
+    <div class="map-head">
+      <h2>Minnesota by county</h2>
+      <div class="map-controls">
+        <button id="unpin" hidden>Clear pin</button>
+        <button id="zoom-out" aria-label="Zoom out">&minus;</button>
+        <button id="zoom-in" aria-label="Zoom in">+</button>
+        <button id="zoom-reset" hidden>Reset</button>
+      </div>
+    </div>
+
+    <p class="panel-note">
+      Colored by the leading candidate in each county, shaded by how far
+      ahead of second place. Scroll to zoom, drag to pan. Hover to inspect,
+      click to pin.
+      <span id="pin-note" hidden>Pinned.</span>
+    </p>
+
+    <div class="map-grid">
+      <figure class="map-cell">
+        <figcaption class="map-title">Counted so far</figcaption>
+        <p class="map-sub" id="note-counted"></p>
+        <svg id="svg-counted" viewBox="0 0 620 700" role="img"
+             aria-label="Minnesota counties by leading candidate in votes counted so far">
+          <g id="shapes-counted"></g>
+        </svg>
+      </figure>
+
+      <figure class="map-cell">
+        <figcaption class="map-title">Model projection</figcaption>
+        <p class="map-sub" id="note-projected"></p>
+        <svg id="svg-projected" viewBox="0 0 620 700" role="img"
+             aria-label="Minnesota counties by the model's blended leading candidate">
+          <g id="shapes-projected"></g>
+        </svg>
+      </figure>
+    </div>
+
+    <div class="legend" id="legend-candidates"></div>
+
+    <div class="map-detail" id="map-detail" data-county="">
+      <p class="map-hint">Hover a county on either map. Click to pin it.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Counties reporting</h2>
+    <p class="panel-note">
+      Sorted by votes counted. Shows the model's blended projection for each
+      county, not just the raw count so far.
+    </p>
+    <div class="table-wrap">
+      <table class="counties">
+        <thead>
+          <tr>
+            <th scope="col">County</th>
+            <th scope="col" class="num">In</th>
+            <th scope="col" class="num">Lindell</th>
+            <th scope="col" class="num">Demuth</th>
+            <th scope="col" class="num">Qualls</th>
+            <th scope="col" class="num">Other</th>
+            <th scope="col">Leader</th>
+          </tr>
+        </thead>
+        <tbody id="county-rows">
+          <tr class="empty"><td colspan="7">No counties reporting yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="two-up">
+    <div class="panel">
+      <h2>Regional swing</h2>
+      <p class="panel-note">
+        How far each region's leading candidate is running from baseline, by
+        region.
+      </p>
+      <div class="regions" id="regions"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Model state</h2>
+      <p class="panel-note">
+        This model is NOT deductive: it doesn't hold counted votes fixed and
+        project only the remainder. Every county's projection blends its own
+        results with the baseline at a credibility weight that grows with how
+        much has reported -- and shifts further toward observed results when
+        many counties show the same pattern, not just one. Sherburne County's
+        baseline is a statewide-average placeholder, not a real read --
+        treat its numbers with extra skepticism.
+      </p>
+      <dl class="diag">
+        <dt>Counties reporting</dt><dd id="d-counties">—</dd>
+        <dt>Statewide shift (Lindell)</dt><dd id="d-shift-lindell">—</dd>
+        <dt>Statewide shift (Demuth)</dt><dd id="d-shift-demuth">—</dd>
+        <dt>Statewide shift (Qualls)</dt><dd id="d-shift-qualls">—</dd>
+      </dl>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Results from <a href="https://civicapi.org">civicAPI</a>. Projections are
+      modeled estimates from a county-level Bayesian simulation, not race calls.
+      Early in the count the model is mostly reporting its baseline back to you.
+      The baseline for this race is thinner than prior builds -- see "Model
+      state" above regarding Sherburne County.
+    </p>
+  </footer>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
